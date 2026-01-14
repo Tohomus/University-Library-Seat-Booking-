@@ -1,3 +1,13 @@
+## Deployment & Routing Note
+
+This application is deployed as a Single Page Application (SPA) using React Router.
+
+To prevent 404 errors on page refresh (e.g. `/login`, `/booking`, `/profile`),
+a `vercel.json` rewrite rule is used so that all routes are correctly handled
+by `index.html` and React Router.
+
+This ensures smooth navigation and refresh behavior across desktop and mobile devices.
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
