@@ -1,3 +1,10 @@
+This App is 1 among 4 of our other work in Progress WebApps. For the first Submission, we present it to STACC. 
+
+## About our App
+
+The CUSAT Library Seat Booking System is a modern web application designed to help university students easily reserve study seats in the library lounge. Built using React (Vite) and Tailwind CSS, the app provides a clean, responsive, and user-friendly interface. Firebase Authentication is used for secure login and registration, while Firestore manages real-time seat availability, booking history, and user profiles. The system prevents multiple active bookings per user and allows users to view and manage their bookings through a profile page. The app is deployed on Vercel and supports PWA features, enabling users to install it on their mobile devices for an app-like experience.
+
+
 ## Deployment & Routing Note
 
 This application is deployed as a Single Page Application (SPA) using React Router.
