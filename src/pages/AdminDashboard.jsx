@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from "react"
-import { CheckCircle, Armchair, XCircle, Clock, Users, TrendingUp } from "lucide-react"
+import { CheckCircle, Armchair, XCircle, Clock } from "lucide-react"
 import {
   collection,
   onSnapshot,
   updateDoc,
   doc
 } from "firebase/firestore"
-import { db } from "../../firebase/firebase"
+import { db } from "../firebase/firebase"
 
 const AdminDashboard = () => {
   const [bookings, setBookings] = useState([])
@@ -16,8 +16,14 @@ const AdminDashboard = () => {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "bookings"), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      
       // Safe sort by creation date (newest first)
-      data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+      data.sort((a, b) => {
+        const aTime = a.createdAt?.seconds || 0
+        const bTime = b.createdAt?.seconds || 0
+        return bTime - aTime
+      })
+      
       setBookings(data)
     })
     return () => unsub()
@@ -33,7 +39,7 @@ const AdminDashboard = () => {
     return () => unsub()
   }, [])
 
-  /* 🧠 CHECK IF BOOKING TIME IS STILL VALID */
+  /* ⏳ FILTER EXPIRED BOOKINGS */
   const isBookingActiveTime = (b) => {
     if (!b.endTime) return true
     const now = new Date()
@@ -43,71 +49,18 @@ const AdminDashboard = () => {
     return now < end
   }
 
-  /* ⏳ AUTO RELEASE EXPIRED BOOKINGS */
-  useEffect(() => {
-    const releaseExpired = async () => {
-      const now = new Date()
-
-      const expired = bookings.filter(b =>
-        b.status === "confirmed" && b.endTime && !isBookingActiveTime(b)
-      )
-
-      for (const booking of expired) {
-        try {
-          console.log(`Auto-release: ${booking.seatId} - expired at ${booking.endTime}`)
-          
-          await updateDoc(doc(db, "bookings", booking.id), {
-            status: "completed",
-            completedAt: now
-          })
-
-          await updateDoc(doc(db, "seats", booking.seatId), {
-            status: "available",
-            bookedBy: null,
-            bookedAt: null,
-            endTime: null,
-            approved: false
-          })
-        } catch (err) {
-          console.error(`Auto release failed for ${booking.seatId}:`, err)
-        }
-      }
-    }
-
-    // Run immediately on load
-    releaseExpired()
-
-    // Run every minute
-    const interval = setInterval(releaseExpired, 60000)
-
-    return () => clearInterval(interval)
-  }, [bookings])
-
-  /* ⚡ ACTIVE BOOKINGS ONLY */
   const activeBookings = useMemo(() => {
     return bookings.filter(
       b => (b.status === "pending" || b.status === "confirmed") && isBookingActiveTime(b)
     )
   }, [bookings])
 
-  /* 🚀 SEAT → BOOKING STATUS MAP (Performance optimization) */
+  /* ⚡ PERFORMANCE MAP */
   const seatBookingMap = useMemo(() => {
     const map = {}
     activeBookings.forEach(b => map[b.seatId] = b.status)
     return map
   }, [activeBookings])
-
-  /* 📊 TRUE OCCUPANCY STATS */
-  const stats = useMemo(() => {
-    const totalSeats = Object.keys(seats).length || 50
-    const pending = activeBookings.filter(b => b.status === "pending").length
-    const confirmed = activeBookings.filter(b => b.status === "confirmed").length
-    const occupied = confirmed
-    const available = totalSeats - pending - confirmed
-    const occupancyRate = ((occupied / totalSeats) * 100).toFixed(1)
-
-    return { totalSeats, pending, confirmed, occupied, available, occupancyRate }
-  }, [activeBookings, seats])
 
   /* 🎨 SEAT COLOR LOGIC */
   const seatColor = (seatId) => {
@@ -185,69 +138,24 @@ const AdminDashboard = () => {
     )
   }
 
+  const pendingBookings = activeBookings.filter(b => b.status === "pending")
+  const confirmedBookings = activeBookings.filter(b => b.status === "confirmed")
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-slate-50 to-pink-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* HEADER */}
+        {/* HEADER WITH STATS */}
         <div className="flex items-center justify-between">
           <h1 className="text-4xl font-bold text-indigo-600">Admin Dashboard</h1>
-        </div>
-
-        {/* 📊 LIVE OCCUPANCY STATISTICS */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Total Seats */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-indigo-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Total Seats</p>
-                <p className="text-3xl font-bold text-indigo-600">{stats.totalSeats}</p>
-              </div>
-              <Armchair size={32} className="text-indigo-300" />
+          <div className="flex gap-4">
+            <div className="bg-white rounded-xl shadow px-4 py-2">
+              <p className="text-sm text-slate-500">Pending</p>
+              <p className="text-2xl font-bold text-blue-600">{pendingBookings.length}</p>
             </div>
-          </div>
-
-          {/* Pending */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-blue-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Pending</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.pending}</p>
-              </div>
-              <Clock size={32} className="text-blue-300" />
-            </div>
-          </div>
-
-          {/* Confirmed */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-green-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Confirmed</p>
-                <p className="text-3xl font-bold text-green-600">{stats.confirmed}</p>
-              </div>
-              <CheckCircle size={32} className="text-green-300" />
-            </div>
-          </div>
-
-          {/* Available */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-emerald-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Available</p>
-                <p className="text-3xl font-bold text-emerald-600">{stats.available}</p>
-              </div>
-              <Users size={32} className="text-emerald-300" />
-            </div>
-          </div>
-
-          {/* Occupancy Rate */}
-          <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-white/80 mb-1">Occupancy</p>
-                <p className="text-3xl font-bold text-white">{stats.occupancyRate}%</p>
-              </div>
-              <TrendingUp size={32} className="text-white/80" />
+            <div className="bg-white rounded-xl shadow px-4 py-2">
+              <p className="text-sm text-slate-500">Confirmed</p>
+              <p className="text-2xl font-bold text-green-600">{confirmedBookings.length}</p>
             </div>
           </div>
         </div>

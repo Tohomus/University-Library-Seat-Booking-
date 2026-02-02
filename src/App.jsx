@@ -4,23 +4,25 @@ import Login from "./pages/Login"
 import Register from "./pages/Register"
 import Booking from "./pages/Booking"
 import Profile from "./pages/Profile"
+import AdminDashboard from "./pages/admin/AdminDashboard"
 
 import DashboardLayout from "./layout/DashboardLayout"
 import ProtectedRoute from "./components/ProtectedRoute"
-import AdminDashboard from "./pages/admin/AdminDashboard"
+import AdminRoute from "./components/AdminRoute"
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
+        {/* Default */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         {/* Public */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Protected */}
+        {/* Student Pages */}
         <Route
           path="/booking"
           element={
@@ -42,16 +44,22 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* 🔐 ADMIN ONLY */}
         <Route
-  path="/admin"
-  element={
-    <DashboardLayout>
-      <AdminDashboard />
-    </DashboardLayout>
-  }
-/>
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <DashboardLayout>
+                  <AdminDashboard />
+                </DashboardLayout>
+              </AdminRoute>
+            </ProtectedRoute>
+          }
+        />
 
-
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
 
       </Routes>

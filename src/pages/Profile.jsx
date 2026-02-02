@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { UserCircle, Calendar, Clock, Armchair } from "lucide-react"
+import { UserCircle, Calendar, Clock, Armchair, AlertCircle } from "lucide-react"
 import { collection, query, where, onSnapshot } from "firebase/firestore"
 import { db } from "../firebase/firebase"
 import { useAuth } from "../context/AuthContext"
@@ -9,6 +9,7 @@ const Profile = () => {
 
   const [userBookings, setUserBookings] = useState([])
   const [activeBooking, setActiveBooking] = useState(null)
+  const [pendingBooking, setPendingBooking] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -35,7 +36,8 @@ const Profile = () => {
         })
 
         setUserBookings(bookings)
-        setActiveBooking(bookings.find((b) => b.status === "active") || null)
+        setActiveBooking(bookings.find((b) => b.status === "confirmed") || null)
+        setPendingBooking(bookings.find((b) => b.status === "pending") || null)
         setLoading(false)
       },
       (error) => {
@@ -92,6 +94,34 @@ const Profile = () => {
               Current Booking
             </h3>
 
+            {/* Pending Booking Alert */}
+            {pendingBooking && (
+              <div className="mb-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 text-yellow-800 mb-2">
+                  <AlertCircle size={18} />
+                  <span className="font-semibold">Pending Approval</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium text-slate-700">Seat {pendingBooking.seatId}</p>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Calendar size={14} className="text-slate-400" />
+                    <span>{pendingBooking.date}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Clock size={14} className="text-slate-400" />
+                    <span>{pendingBooking.startTime} – {pendingBooking.endTime}</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Duration: {pendingBooking.hours} hour{pendingBooking.hours > 1 ? 's' : ''}
+                  </p>
+                </div>
+                <span className="inline-block mt-3 px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
+                  ⏳ Awaiting Admin Approval
+                </span>
+              </div>
+            )}
+
+            {/* Active/Confirmed Booking */}
             {activeBooking ? (
               <div className="space-y-3">
                 <div className="bg-indigo-50 p-4 rounded-xl">
@@ -122,10 +152,10 @@ const Profile = () => {
                 </div>
 
                 <span className="inline-block mt-3 px-4 py-2 rounded-full bg-green-100 text-green-700 text-sm font-semibold">
-                  ✓ Active Booking
+                  ✓ Confirmed Booking
                 </span>
               </div>
-            ) : (
+            ) : !pendingBooking ? (
               <div className="text-center py-8">
                 <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
                   <Armchair size={32} className="text-slate-400" />
@@ -133,7 +163,7 @@ const Profile = () => {
                 <p className="text-slate-500">No active booking</p>
                 <p className="text-sm text-slate-400 mt-1">Book a seat to get started</p>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Booking History */}
@@ -149,8 +179,10 @@ const Profile = () => {
                   <div
                     key={booking.id}
                     className={`p-4 rounded-xl border-2 transition-all ${
-                      booking.status === "active"
+                      booking.status === "confirmed"
                         ? "border-green-200 bg-green-50"
+                        : booking.status === "pending"
+                        ? "border-yellow-200 bg-yellow-50"
                         : "border-slate-200 bg-slate-50"
                     }`}
                   >
@@ -178,12 +210,18 @@ const Profile = () => {
 
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                          booking.status === "active"
+                          booking.status === "confirmed"
                             ? "bg-green-100 text-green-700"
+                            : booking.status === "pending"
+                            ? "bg-yellow-100 text-yellow-700"
                             : "bg-slate-200 text-slate-600"
                         }`}
                       >
-                        {booking.status === "active" ? "Active" : "Completed"}
+                        {booking.status === "confirmed" 
+                          ? "Confirmed" 
+                          : booking.status === "pending" 
+                          ? "Pending" 
+                          : "Completed"}
                       </span>
                     </div>
                   </div>

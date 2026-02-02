@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { signInWithEmailAndPassword } from "firebase/auth"
+import { doc, getDoc } from "firebase/firestore"
 import { Link, useNavigate } from "react-router-dom"
 
-import { auth } from "../firebase/firebase"
+import { auth, db } from "../firebase/firebase"
 import Navbar from "../components/Navbar"
 import PrimaryButton from "../components/PrimaryButton"
 import InputField from "../components/InputField"
@@ -13,16 +14,31 @@ function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setError("")
+    setLoading(true)
 
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      navigate("/booking")
-    } catch {
+      // 🔐 Sign in user
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const loggedUser = userCredential.user
+
+      // 🔎 Fetch role from Firestore
+      const userDoc = await getDoc(doc(db, "users", loggedUser.uid))
+
+      if (userDoc.exists() && userDoc.data().role === "admin") {
+        navigate("/admin")
+      } else {
+        navigate("/booking")
+      }
+
+    } catch (err) {
       setError("Invalid email or password")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -63,8 +79,8 @@ function Login() {
                 onChange={(e) => setPassword(e.target.value)}
               />
 
-              <PrimaryButton type="submit" fullWidth>
-                Login
+              <PrimaryButton type="submit" fullWidth disabled={loading}>
+                {loading ? "Logging in..." : "Login"}
               </PrimaryButton>
             </form>
 

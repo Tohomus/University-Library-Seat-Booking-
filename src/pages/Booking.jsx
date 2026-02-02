@@ -70,7 +70,7 @@ const Booking = () => {
         snapshot.forEach((docSnap) => {
           const seatData = docSnap.data()
           
-          // Check if seat is booked AND booking hasn't expired
+          // Check if seat is booked (includes both pending and confirmed)
           if (seatData.status === "booked") {
             // If there's an endTime, check if it's still valid
             if (seatData.endTime) {
@@ -134,15 +134,16 @@ const Booking = () => {
       return
     }
 
+    // Check for pending or active bookings
     const activeQuery = query(
       collection(db, "bookings"),
       where("userId", "==", user.uid),
-      where("status", "==", "active")
+      where("status", "in", ["pending", "confirmed"])
     )
 
     const activeSnap = await getDocs(activeQuery)
     if (!activeSnap.empty) {
-      alert("You already have an active booking. Cancel it before booking again.")
+      alert("You already have a pending or active booking. Wait for approval or cancel it first.")
       return
     }
 
@@ -160,7 +161,7 @@ const Booking = () => {
             throw new Error(`Seat ${seatId} already booked`)
           }
 
-          // Lock seat with end time for auto-release logic
+          // Lock seat with pending status
           transaction.update(seatRef, {
             status: "booked",
             bookedBy: user.uid,
@@ -168,23 +169,24 @@ const Booking = () => {
             endTime: endTime, // Store end time for expiration checking
           })
 
-          // Create booking record
+          // Create booking record with PENDING status
           const bookingRef = doc(collection(db, "bookings"))
           transaction.set(bookingRef, {
             userId: user.uid,
+            userEmail: user.email,
             seatId,
             date: today.toDateString(),
             startTime,
             endTime,
             hours,
-            status: "active",
+            status: "pending", // ⭐ CHANGED: Set initial status to "pending"
             createdAt: serverTimestamp(),
           })
         }
       })
 
       setSelectedSeats([])
-      alert("Booking confirmed successfully!")
+      alert("Booking request submitted! Waiting for admin approval.")
     } catch (err) {
       console.error("Transaction failed:", err.message)
       alert(err.message || "Booking failed. Try again.")
@@ -334,7 +336,7 @@ const Booking = () => {
           }`}
         >
           <CheckCircle size={20} />
-          Confirm Booking ({selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''})
+          Submit Booking Request ({selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''})
         </button>
       </div>
     </div>
