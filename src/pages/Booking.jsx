@@ -3,7 +3,6 @@ import { Armchair, CheckCircle } from "lucide-react"
 import {
   collection,
   doc,
-  addDoc,
   serverTimestamp,
   query,
   where,
@@ -11,7 +10,6 @@ import {
   onSnapshot,
   runTransaction,
 } from "firebase/firestore"
-
 import { db } from "../firebase/firebase"
 import { useAuth } from "../context/AuthContext"
 
@@ -22,19 +20,75 @@ const Booking = () => {
   const [bookedSeats, setBookedSeats] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const [hours, setHours] = useState(2)
+  const [startTime, setStartTime] = useState("")
+  const [endTime, setEndTime] = useState("")
+
+  /* ---------------- LIBRARY TIME RULES ---------------- */
+  const openHour = 9
+  const closeHour = 23
+  const closeMinute = 30
+
+  const isWeekend = () => {
+    const day = new Date().getDay() // 0 Sun → 6 Sat
+    return day === 0 || day === 6
+  }
+
+  const pad = (n) => n.toString().padStart(2, "0")
+
+  const calculateEndTime = (start, duration) => {
+    const [h, m] = start.split(":").map(Number)
+    const end = new Date()
+    end.setHours(h)
+    end.setMinutes(m)
+    end.setMinutes(end.getMinutes() + duration * 60) // Safe calculation
+    
+    return `${pad(end.getHours())}:${pad(end.getMinutes())}`
+  }
+
+  useEffect(() => {
+    const now = new Date()
+    let currentHour = now.getHours()
+    let currentMinute = now.getMinutes()
+
+    if (currentHour < openHour) {
+      currentHour = openHour
+      currentMinute = 0
+    }
+
+    const start = `${pad(currentHour)}:${pad(currentMinute)}`
+    setStartTime(start)
+    setEndTime(calculateEndTime(start, hours))
+  }, [hours])
+
   /* ---------------- REAL-TIME SEAT LISTENER ---------------- */
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "seats"),
       (snapshot) => {
         const booked = []
-
         snapshot.forEach((docSnap) => {
-          if (docSnap.data().status === "booked") {
-            booked.push(docSnap.id)
+          const seatData = docSnap.data()
+          
+          // Check if seat is booked AND booking hasn't expired
+          if (seatData.status === "booked") {
+            // If there's an endTime, check if it's still valid
+            if (seatData.endTime) {
+              const now = new Date()
+              const [endH, endM] = seatData.endTime.split(":").map(Number)
+              const endDateTime = new Date()
+              endDateTime.setHours(endH, endM, 0, 0)
+              
+              // Only mark as booked if booking hasn't expired
+              if (now < endDateTime) {
+                booked.push(docSnap.id)
+              }
+            } else {
+              // Legacy bookings without endTime
+              booked.push(docSnap.id)
+            }
           }
         })
-
         setBookedSeats(booked)
         setLoading(false)
       },
@@ -43,14 +97,12 @@ const Booking = () => {
         setLoading(false)
       }
     )
-
     return () => unsubscribe()
   }, [])
 
   /* ---------------- SEAT LOGIC ---------------- */
   const toggleSeat = (seatId) => {
     if (bookedSeats.includes(seatId)) return
-
     setSelectedSeats((prev) =>
       prev.includes(seatId)
         ? prev.filter((s) => s !== seatId)
@@ -64,25 +116,37 @@ const Booking = () => {
     return "#22c55e"
   }
 
-  /* ---------------- CONFIRM BOOKING (TRANSACTION) ---------------- */
+  /* ---------------- CONFIRM BOOKING ---------------- */
   const confirmBooking = async () => {
     if (!selectedSeats.length || !user) return
 
+    // Get fresh date when booking is confirmed (not when component loads)
+    const today = new Date()
+
+    if (isWeekend()) {
+      alert("Student lounge is closed on weekends.")
+      return
+    }
+
+    const [endH, endM] = endTime.split(":").map(Number)
+    if (endH > closeHour || (endH === closeHour && endM > closeMinute)) {
+      alert("Booking exceeds closing time (11:30 PM).")
+      return
+    }
+
+    const activeQuery = query(
+      collection(db, "bookings"),
+      where("userId", "==", user.uid),
+      where("status", "==", "active")
+    )
+
+    const activeSnap = await getDocs(activeQuery)
+    if (!activeSnap.empty) {
+      alert("You already have an active booking. Cancel it before booking again.")
+      return
+    }
+
     try {
-      // 🔐 Check active booking (outside transaction)
-      const activeQuery = query(
-        collection(db, "bookings"),
-        where("userId", "==", user.uid),
-        where("status", "==", "active")
-      )
-
-      const activeSnap = await getDocs(activeQuery)
-      if (!activeSnap.empty) {
-        alert("You already have an active booking. Cancel it before booking again.")
-        return
-      }
-
-      // 🔥 FIRESTORE TRANSACTION
       await runTransaction(db, async (transaction) => {
         for (const seatId of selectedSeats) {
           const seatRef = doc(db, "seats", seatId)
@@ -96,21 +160,24 @@ const Booking = () => {
             throw new Error(`Seat ${seatId} already booked`)
           }
 
-          // Lock seat
+          // Lock seat with end time for auto-release logic
           transaction.update(seatRef, {
             status: "booked",
             bookedBy: user.uid,
             bookedAt: serverTimestamp(),
+            endTime: endTime, // Store end time for expiration checking
           })
 
-          // Create booking (inside transaction)
+          // Create booking record
           const bookingRef = doc(collection(db, "bookings"))
           transaction.set(bookingRef, {
             userId: user.uid,
             seatId,
+            date: today.toDateString(),
+            startTime,
+            endTime,
+            hours,
             status: "active",
-            date: new Date().toLocaleDateString(),
-            timeSlot: "10:00 – 12:00",
             createdAt: serverTimestamp(),
           })
         }
@@ -178,6 +245,35 @@ const Booking = () => {
           Student Lounge Seat Booking
         </h1>
 
+        {/* Time Selection Controls */}
+        <div className="flex gap-6 mb-6 justify-center items-center bg-slate-50 p-4 rounded-xl">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Stay Duration (hours)
+            </label>
+            <select
+              value={hours}
+              onChange={(e) => setHours(Number(e.target.value))}
+              className="border border-slate-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              {[1, 2, 3, 4, 5].map((h) => (
+                <option key={h} value={h}>
+                  {h} hour{h > 1 ? 's' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg border border-slate-200">
+            <p className="text-sm text-slate-600">
+              Start: <span className="font-bold text-slate-800">{startTime}</span>
+            </p>
+            <p className="text-sm text-slate-600">
+              End: <span className="font-bold text-slate-800">{endTime}</span>
+            </p>
+          </div>
+        </div>
+
         {/* Legend */}
         <div className="flex justify-center gap-6 mb-6">
           <div className="flex items-center gap-2">
@@ -194,7 +290,7 @@ const Booking = () => {
           </div>
         </div>
 
-        {/* SVG MAP — EXACT REFERENCE */}
+        {/* SVG MAP — COMPLETE LAYOUT */}
         <div className="w-full overflow-x-auto">
           <svg viewBox="0 0 1000 1000" className="mx-auto w-full max-w-3xl">
             <rect x="50" y="50" width="900" height="900" rx="40" fill="none" stroke="#e2e8f0" strokeWidth="4" />
@@ -204,24 +300,26 @@ const Booking = () => {
               STUDY TABLE
             </text>
 
+            {/* Inner seats around study table */}
             {[
-              [380,350],[440,350],[500,350],[560,350],[620,350],
-              [680,440],[680,500],[680,560],
-              [620,650],[560,650],[500,650],[440,650],[380,650],
-              [320,560],[320,500],[320,440],
-            ].map(([x,y], i) => (
-              <Seat key={`I${i+1}`} id={`I${i+1}`} x={x} y={y} />
+              [380, 350], [440, 350], [500, 350], [560, 350], [620, 350],
+              [680, 440], [680, 500], [680, 560],
+              [620, 650], [560, 650], [500, 650], [440, 650], [380, 650],
+              [320, 560], [320, 500], [320, 440],
+            ].map(([x, y], i) => (
+              <Seat key={`I${i + 1}`} id={`I${i + 1}`} x={x} y={y} />
             ))}
 
+            {/* Outer seats along perimeter */}
             {[
-              [140,150],[220,150],[300,150],[380,150],[460,150],
-              [540,150],[620,150],[700,150],[780,150],[860,150],
-              [900,240],[900,340],[900,440],[900,540],[900,640],[900,740],[900,840],
-              [860,900],[780,900],[700,900],[620,900],[540,900],
-              [460,900],[380,900],[300,900],[220,900],[140,900],
-              [100,840],[100,740],[100,640],[100,540],[100,440],[100,340],[100,240],
-            ].map(([x,y], i) => (
-              <Seat key={`O${i+1}`} id={`O${i+1}`} x={x} y={y} />
+              [140, 150], [220, 150], [300, 150], [380, 150], [460, 150],
+              [540, 150], [620, 150], [700, 150], [780, 150], [860, 150],
+              [900, 240], [900, 340], [900, 440], [900, 540], [900, 640], [900, 740], [900, 840],
+              [860, 900], [780, 900], [700, 900], [620, 900], [540, 900],
+              [460, 900], [380, 900], [300, 900], [220, 900], [140, 900],
+              [100, 840], [100, 740], [100, 640], [100, 540], [100, 440], [100, 340], [100, 240],
+            ].map(([x, y], i) => (
+              <Seat key={`O${i + 1}`} id={`O${i + 1}`} x={x} y={y} />
             ))}
           </svg>
         </div>
@@ -229,14 +327,14 @@ const Booking = () => {
         <button
           onClick={confirmBooking}
           disabled={!selectedSeats.length}
-          className={`mt-6 w-full py-3 rounded-xl font-semibold flex justify-center items-center gap-2 ${
+          className={`mt-6 w-full py-3 rounded-xl font-semibold flex justify-center items-center gap-2 transition-all ${
             selectedSeats.length
               ? "bg-blue-600 text-white hover:bg-blue-700 shadow-lg"
               : "bg-slate-300 text-slate-500 cursor-not-allowed"
           }`}
         >
           <CheckCircle size={20} />
-          Confirm Booking
+          Confirm Booking ({selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''})
         </button>
       </div>
     </div>
