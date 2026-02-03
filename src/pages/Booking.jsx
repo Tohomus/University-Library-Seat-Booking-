@@ -116,6 +116,19 @@ const Booking = () => {
     return "#22c55e"
   }
 
+
+  const getActiveSeatCount = async () => {
+  const q = query(
+    collection(db, "bookings"),
+    where("userId", "==", user.uid),
+    where("status", "in", ["pending", "confirmed"])
+  )
+
+  const snap = await getDocs(q)
+  return snap.size // number of seats already booked
+}
+
+
   /* ---------------- CONFIRM BOOKING ---------------- */
   const confirmBooking = async () => {
     if (!selectedSeats.length || !user) return
@@ -135,17 +148,15 @@ const Booking = () => {
     }
 
     // Check for pending or active bookings
-    const activeQuery = query(
-      collection(db, "bookings"),
-      where("userId", "==", user.uid),
-      where("status", "in", ["pending", "confirmed"])
-    )
+    // 🔒 MAX 2 ACTIVE SEATS RULE
+const currentActiveSeats = await getActiveSeatCount()
+const seatsTryingToBook = selectedSeats.length
 
-    const activeSnap = await getDocs(activeQuery)
-    if (!activeSnap.empty) {
-      alert("You already have a pending or active booking. Wait for approval or cancel it first.")
-      return
-    }
+if (currentActiveSeats + seatsTryingToBook > 2) {
+  alert(`You can only have 2 active seat bookings at a time.\nCurrently active: ${currentActiveSeats}`)
+  return
+}
+
 
     try {
       await runTransaction(db, async (transaction) => {

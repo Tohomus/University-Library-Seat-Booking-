@@ -86,7 +86,7 @@ const AdminDashboard = () => {
   /* ⚡ ACTIVE BOOKINGS ONLY */
   const activeBookings = useMemo(() => {
     return bookings.filter(
-      b => (b.status === "pending" || b.status === "confirmed") && isBookingActiveTime(b)
+      b => (b.status === "pending" || b.status === "confirmed")
     )
   }, [bookings])
 
