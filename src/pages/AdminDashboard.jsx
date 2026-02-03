@@ -16,14 +16,11 @@ const AdminDashboard = () => {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "bookings"), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      
-      // Safe sort by creation date (newest first)
       data.sort((a, b) => {
         const aTime = a.createdAt?.seconds || 0
         const bTime = b.createdAt?.seconds || 0
         return bTime - aTime
       })
-      
       setBookings(data)
     })
     return () => unsub()
@@ -65,23 +62,17 @@ const AdminDashboard = () => {
   /* 🎨 SEAT COLOR LOGIC */
   const seatColor = (seatId) => {
     const status = seatBookingMap[seatId]
-    if (!status) return "#22c55e" // Green - Available
-    if (status === "pending") return "#2563eb" // Blue - Pending
-    if (status === "confirmed") return "#ef4444" // Red - Confirmed
+    if (!status) return "#22c55e"
+    if (status === "pending") return "#2563eb"
+    if (status === "confirmed") return "#ef4444"
     return "#22c55e"
   }
 
   /* ✅ CONFIRM BOOKING */
   const confirmBooking = async (booking) => {
     try {
-      await updateDoc(doc(db, "bookings", booking.id), {
-        status: "confirmed"
-      })
-
-      await updateDoc(doc(db, "seats", booking.seatId), {
-        status: "booked",
-        approved: true
-      })
+      await updateDoc(doc(db, "bookings", booking.id), { status: "confirmed" })
+      await updateDoc(doc(db, "seats", booking.seatId), { status: "booked", approved: true })
     } catch (error) {
       console.error("Error confirming booking:", error)
       alert("Failed to confirm booking")
@@ -91,12 +82,7 @@ const AdminDashboard = () => {
   /* ❌ REJECT BOOKING */
   const rejectBooking = async (booking) => {
     try {
-      await updateDoc(doc(db, "bookings", booking.id), {
-        status: "rejected",
-        closedAt: new Date()
-      })
-      
-      // Release the seat
+      await updateDoc(doc(db, "bookings", booking.id), { status: "rejected", closedAt: new Date() })
       await updateDoc(doc(db, "seats", booking.seatId), {
         status: "available",
         bookedBy: null,
@@ -115,22 +101,25 @@ const AdminDashboard = () => {
     const size = 32
     return (
       <g>
-        <Armchair
+        <rect
           x={x - size / 2}
           y={y - size / 2}
           width={size}
           height={size}
+          rx={6}
+          fill={seatColor(id)}
+          fillOpacity={0.18}
           stroke={seatColor(id)}
-          fill="none"
-          strokeWidth="2"
+          strokeWidth={2.5}
         />
-        <text 
-          x={x} 
-          y={y + 26} 
-          fontSize="10" 
+        <text
+          x={x}
+          y={y + 5}
+          fontSize="10"
           textAnchor="middle"
-          fill="#475569"
-          fontWeight="600"
+          dominantBaseline="middle"
+          fill={seatColor(id)}
+          fontWeight="700"
         >
           {id}
         </text>
@@ -141,149 +130,258 @@ const AdminDashboard = () => {
   const pendingBookings = activeBookings.filter(b => b.status === "pending")
   const confirmedBookings = activeBookings.filter(b => b.status === "confirmed")
 
+  /* ─── Inner & Outer seat coordinate arrays ─── */
+  const innerSeats = [
+    [380, 350], [440, 350], [500, 350], [560, 350], [620, 350],
+    [680, 440], [680, 500], [680, 560],
+    [620, 650], [560, 650], [500, 650], [440, 650], [380, 650],
+    [320, 560], [320, 500], [320, 440],
+  ]
+
+  const outerSeats = [
+    [140, 150], [220, 150], [300, 150], [380, 150], [460, 150],
+    [540, 150], [620, 150], [700, 150], [780, 150], [860, 150],
+    [900, 240], [900, 340], [900, 440], [900, 540], [900, 640], [900, 740], [900, 840],
+    [860, 900], [780, 900], [700, 900], [620, 900], [540, 900],
+    [460, 900], [380, 900], [300, 900], [220, 900], [140, 900],
+    [100, 840], [100, 740], [100, 640], [100, 540], [100, 440], [100, 340], [100, 240],
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-slate-50 to-pink-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* HEADER WITH STATS */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-4xl font-bold text-indigo-600">Admin Dashboard</h1>
-          <div className="flex gap-4">
-            <div className="bg-white rounded-xl shadow px-4 py-2">
-              <p className="text-sm text-slate-500">Pending</p>
-              <p className="text-2xl font-bold text-blue-600">{pendingBookings.length}</p>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #ede9fe 0%, #f8fafc 40%, #fdf2f8 100%)", padding: "16px" }}>
+      <style>{`
+        /* ── Utility ── */
+        .admin-wrap { max-width: 1200px; margin: 0 auto; }
+
+        /* ── Header ── */
+        .admin-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .admin-header h1 {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: #4f46e5;
+          margin: 0;
+        }
+        .stats-row { display: flex; gap: 10px; }
+        .stat-card {
+          background: #fff;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          padding: 10px 18px;
+          text-align: center;
+          min-width: 80px;
+        }
+        .stat-card .label { font-size: 0.75rem; color: #94a3b8; margin: 0; }
+        .stat-card .value { font-size: 1.6rem; font-weight: 700; margin: 2px 0 0; }
+
+        /* ── Card shell ── */
+        .card {
+          background: #fff;
+          border-radius: 18px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+          padding: 20px;
+        }
+        .card h2 { font-size: 1.15rem; font-weight: 600; color: #1e293b; margin: 0 0 16px; }
+
+        /* ── Booking item ── */
+        .booking-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 14px 16px;
+          border-radius: 14px;
+          border: 2px solid;
+        }
+        .booking-item.pending  { border-color: #bfdbfe; background: #eff6ff; }
+        .booking-item.confirmed { border-color: #bbf7d0; background: #f0fdf4; }
+
+        .booking-info { flex: 1; min-width: 0; }
+        .booking-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+        .booking-top .seat-id { font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+        .badge {
+          font-size: 0.7rem;
+          font-weight: 600;
+          padding: 2px 10px;
+          border-radius: 20px;
+        }
+        .badge.pending   { background: #dbeafe; color: #1d4ed8; }
+        .badge.confirmed { background: #dcfce7; color: #15803d; }
+
+        .booking-detail { font-size: 0.82rem; color: #64748b; margin: 3px 0; }
+        .booking-detail .key { font-weight: 600; color: #475569; }
+        .time-row { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #64748b; margin-top: 4px; }
+
+        /* ── Action buttons ── */
+        .btn-row { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn {
+          display: flex; align-items: center; gap: 6px;
+          font-size: 0.82rem; font-weight: 600;
+          padding: 8px 14px;
+          border: none; border-radius: 10px;
+          cursor: pointer; color: #fff;
+          transition: background 0.15s;
+          white-space: nowrap;
+        }
+        .btn-confirm  { background: #16a34a; }
+        .btn-confirm:hover { background: #15803d; }
+        .btn-reject   { background: #dc2626; }
+        .btn-reject:hover  { background: #b91c1c; }
+        .approved-text { color: #16a34a; font-weight: 600; font-size: 0.85rem; padding: 8px 0; white-space: nowrap; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 40px 0; color: #94a3b8; }
+        .empty-state p { margin: 8px 0 0; font-size: 0.9rem; }
+
+        /* ── Legend ── */
+        .legend { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #475569; }
+        .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
+
+        /* ── SVG map ── */
+        .svg-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .svg-scroll svg { display: block; min-width: 320px; width: 100%; max-width: 860px; margin: 0 auto; }
+
+        /* ════════════════════════════════════════
+           📱  MOBILE  (< 480 px)
+           ════════════════════════════════════════ */
+        @media (max-width: 480px) {
+          .admin-wrap { padding: 0; }
+          .admin-header { flex-direction: column; align-items: flex-start; }
+          .admin-header h1 { font-size: 1.35rem; }
+          .stat-card { padding: 8px 14px; min-width: 70px; }
+          .stat-card .value { font-size: 1.35rem; }
+          .card { padding: 14px; border-radius: 14px; }
+          .card h2 { font-size: 1rem; }
+
+          /* Stack action row below info on mobile */
+          .booking-item { flex-direction: column; }
+          .btn-row { width: 100%; }
+          .btn { flex: 1; justify-content: center; padding: 10px 8px; font-size: 0.8rem; }
+          .approved-text { width: 100%; text-align: center; }
+
+          .legend { gap: 12px; }
+        }
+
+        /* ════════════════════════════════════════
+           📲  SMALL TABLET  (481 – 768 px)
+           ════════════════════════════════════════ */
+        @media (min-width: 481px) and (max-width: 768px) {
+          .admin-header h1 { font-size: 1.55rem; }
+          .booking-item { flex-direction: column; }
+          .btn-row { width: 100%; justify-content: flex-end; }
+        }
+
+        /* ════════════════════════════════════════
+           🖥️  DESKTOP  (> 768 px)
+           ════════════════════════════════════════ */
+        @media (min-width: 769px) {
+          .admin-wrap { padding: 0; }
+          .card { padding: 24px; }
+        }
+      `}</style>
+
+      <div className="admin-wrap" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+        {/* ───── HEADER + STATS ───── */}
+        <div className="admin-header">
+          <h1>Admin Dashboard</h1>
+          <div className="stats-row">
+            <div className="stat-card">
+              <p className="label">Pending</p>
+              <p className="value" style={{ color: "#2563eb" }}>{pendingBookings.length}</p>
             </div>
-            <div className="bg-white rounded-xl shadow px-4 py-2">
-              <p className="text-sm text-slate-500">Confirmed</p>
-              <p className="text-2xl font-bold text-green-600">{confirmedBookings.length}</p>
+            <div className="stat-card">
+              <p className="label">Confirmed</p>
+              <p className="value" style={{ color: "#16a34a" }}>{confirmedBookings.length}</p>
             </div>
           </div>
         </div>
 
-        {/* BOOKINGS LIST */}
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4">Booking Requests</h2>
-          
+        {/* ───── BOOKING LIST ───── */}
+        <div className="card">
+          <h2>Booking Requests</h2>
           {activeBookings.length > 0 ? (
-            <div className="space-y-3">
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {activeBookings.map(b => (
-                <div 
-                  key={b.id} 
-                  className={`flex justify-between items-center p-4 rounded-xl border-2 ${
-                    b.status === "pending" 
-                      ? "border-blue-200 bg-blue-50" 
-                      : "border-green-200 bg-green-50"
-                  }`}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Armchair size={20} className="text-slate-500" />
-                      <p className="font-bold text-lg text-slate-800">{b.seatId}</p>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        b.status === "pending"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-green-100 text-green-700"
-                      }`}>
+                <div key={b.id} className={`booking-item ${b.status}`}>
+                  <div className="booking-info">
+                    <div className="booking-top">
+                      <Armchair size={18} color="#64748b" />
+                      <span className="seat-id">{b.seatId}</span>
+                      <span className={`badge ${b.status}`}>
                         {b.status === "pending" ? "Pending" : "Confirmed"}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-600 mb-1">
-                      <span className="font-medium">User:</span> {b.userEmail || b.userId}
+                    <p className="booking-detail">
+                      <span className="key">User: </span>{b.userEmail || b.userId}
                     </p>
-                    <p className="text-sm text-slate-600 mb-1">
-                      <span className="font-medium">Date:</span> {b.date}
+                    <p className="booking-detail">
+                      <span className="key">Date: </span>{b.date}
                     </p>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Clock size={14} className="text-slate-400" />
+                    <div className="time-row">
+                      <Clock size={13} color="#94a3b8" />
                       <span>{b.startTime} – {b.endTime}</span>
-                      <span className="text-slate-400">({b.hours}h)</span>
+                      <span style={{ color: "#94a3b8" }}>({b.hours}h)</span>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    {b.status === "pending" && (
+                  <div className="btn-row">
+                    {b.status === "pending" ? (
                       <>
-                        <button
-                          onClick={() => confirmBooking(b)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-                        >
-                          <CheckCircle size={18} />
-                          Confirm
+                        <button className="btn btn-confirm" onClick={() => confirmBooking(b)}>
+                          <CheckCircle size={16} /> Confirm
                         </button>
-                        <button
-                          onClick={() => rejectBooking(b)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-                        >
-                          <XCircle size={18} />
-                          Reject
+                        <button className="btn btn-reject" onClick={() => rejectBooking(b)}>
+                          <XCircle size={16} /> Reject
                         </button>
                       </>
-                    )}
-                    {b.status === "confirmed" && (
-                      <span className="text-green-600 font-semibold px-4 py-2">
-                        ✓ Approved
-                      </span>
+                    ) : (
+                      <span className="approved-text">✓ Approved</span>
                     )}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 text-slate-400">
-              <Armchair size={48} className="mx-auto mb-3 opacity-50" />
+            <div className="empty-state">
+              <Armchair size={44} color="#cbd5e1" />
               <p>No pending or active bookings</p>
             </div>
           )}
         </div>
 
-        {/* SEAT MAP */}
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4">Live Seat Layout</h2>
-          
-          {/* Legend */}
-          <div className="flex justify-center gap-6 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-green-500"></div>
-              <span className="text-sm text-gray-700">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-blue-600"></div>
-              <span className="text-sm text-gray-700">Pending Approval</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-sm text-gray-700">Confirmed</span>
-            </div>
+        {/* ───── LIVE SEAT MAP ───── */}
+        <div className="card">
+          <h2>Live Seat Layout</h2>
+
+          <div className="legend">
+            <div className="legend-item"><div className="legend-dot" style={{ background: "#22c55e" }}></div> Available</div>
+            <div className="legend-item"><div className="legend-dot" style={{ background: "#2563eb" }}></div> Pending</div>
+            <div className="legend-item"><div className="legend-dot" style={{ background: "#ef4444" }}></div> Confirmed</div>
           </div>
 
-          <div className="w-full overflow-x-auto">
-            <svg viewBox="0 0 1000 1000" className="mx-auto w-full max-w-4xl">
-              <rect x="50" y="50" width="900" height="900" rx="40" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+          <div className="svg-scroll">
+            <svg viewBox="50 50 900 900" preserveAspectRatio="xMidYMid meet">
+              {/* Outer border */}
+              <rect x="55" y="55" width="890" height="890" rx="36" fill="none" stroke="#e2e8f0" strokeWidth="3" />
 
-              <rect x="350" y="400" width="300" height="200" rx="32" fill="#fef3c7" stroke="#d97706" strokeWidth="6" />
-              <text x="500" y="515" textAnchor="middle" fontSize="18" fill="#92400e" fontWeight="700">
-                STUDY TABLE
-              </text>
+              {/* Study table */}
+              <rect x="350" y="400" width="300" height="200" rx="28" fill="#fef3c7" stroke="#d97706" strokeWidth="5" />
+              <text x="500" y="510" textAnchor="middle" fontSize="17" fill="#92400e" fontWeight="700">STUDY TABLE</text>
 
-              {/* Inner seats around study table */}
-              {[
-                [380, 350], [440, 350], [500, 350], [560, 350], [620, 350],
-                [680, 440], [680, 500], [680, 560],
-                [620, 650], [560, 650], [500, 650], [440, 650], [380, 650],
-                [320, 560], [320, 500], [320, 440],
-              ].map(([x, y], i) => (
+              {/* Inner ring */}
+              {innerSeats.map(([x, y], i) => (
                 <Seat key={`I${i + 1}`} id={`I${i + 1}`} x={x} y={y} />
               ))}
 
-              {/* Outer seats along perimeter */}
-              {[
-                [140, 150], [220, 150], [300, 150], [380, 150], [460, 150],
-                [540, 150], [620, 150], [700, 150], [780, 150], [860, 150],
-                [900, 240], [900, 340], [900, 440], [900, 540], [900, 640], [900, 740], [900, 840],
-                [860, 900], [780, 900], [700, 900], [620, 900], [540, 900],
-                [460, 900], [380, 900], [300, 900], [220, 900], [140, 900],
-                [100, 840], [100, 740], [100, 640], [100, 540], [100, 440], [100, 340], [100, 240],
-              ].map(([x, y], i) => (
+              {/* Outer ring */}
+              {outerSeats.map(([x, y], i) => (
                 <Seat key={`O${i + 1}`} id={`O${i + 1}`} x={x} y={y} />
               ))}
             </svg>
