@@ -75,7 +75,7 @@ const Profile = () => {
               <h2 className="text-lg font-semibold text-slate-800">
                 {user?.email}
               </h2>
-              <p className="text-slate-500 text-sm">CUSAT Library Member</p>
+              <p className="text-slate-500 text-sm">University Library Member</p>
             </div>
           </div>
           

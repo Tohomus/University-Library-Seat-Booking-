@@ -10,7 +10,7 @@ const Sidebar = ({ onLogout }) => {
       {/* ================= DESKTOP SIDEBAR ================= */}
       <aside className="hidden md:flex h-screen w-64 bg-white border-r border-slate-200 px-6 py-8 flex-col">
         <h1 className="text-xl font-bold text-indigo-600 mb-10">
-          CUSAT Library
+          University Library
         </h1>
 
         <nav className="flex flex-col gap-3 flex-1">
