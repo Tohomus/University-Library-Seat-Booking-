@@ -12,9 +12,9 @@ export default defineConfig({
         "icons/icon-512.png"
       ],
       manifest: {
-        name: "CUSAT Library Seat Booking",
-        short_name: "CUSAT Library",
-        description: "Seat booking system for CUSAT University Library",
+        name: "University Library Seat Booking",
+        short_name: "University Library",
+        description: "Seat booking system for University Library",
         start_url: "/",
         display: "standalone",
         background_color: "#EEF2FF",
